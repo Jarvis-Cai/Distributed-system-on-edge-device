@@ -7,7 +7,7 @@ import time
 import subprocess
 import json
 from threading import Thread
-from queue import Queue
+from multiprocessing import Queue
 import calculate_speed_test as cst
 import start_all_system as sas
 
@@ -76,13 +76,16 @@ class AutoCheck:
 		:param next_one_ip: next machine in the chain
 		:return: None
 		"""
+		time.sleep(3)  # take care of the delay time
 		udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		dest_addr = (next_one_ip, 22222)
 		json_string = json.dumps(a_message).encode()
 		udp_socket.sendto(json_string, dest_addr)
 		udp_socket.close()
+		print('message sending finished!')
 
 	def first_start(self):
+		sendcommand_instance = sas.SendCommand()
 		while True:
 			_key_ring = self.q.get()
 			ip_of_devices = _key_ring['device']
@@ -97,22 +100,29 @@ class AutoCheck:
 			if flag_of_ok_device_sum == Nums_of_devices and not system_is_running:
 				# launch branch
 				_key_ring['situation']['system_is_running'] = True
-				sas.SendCommand().start_system(_key_ring)  # start distribute system
+				sendcommand_instance.start_system(_key_ring)  # start distribute system
 				# sas.SendCommand.test_del()
-				next_one_ip = self._get_next_one_ip(ip_of_devices)
+				next_one_ip, _ = self._get_next_one_ip(ip_of_devices)
 				self.send_a_message(_key_ring, next_one_ip)
 			elif flag_of_ok_device_sum < Nums_of_devices:
 				# calculate brach
 				# find out yourself and get the capability
-				next_one_ip = self._get_next_one_ip(ip_of_devices, if_calculate=True)
+				next_one_ip, _ = self._get_next_one_ip(ip_of_devices, if_calculate=True)
 				flag_of_ok_device_sum += 1
 				_key_ring['situation']['flag_of_ok_device_sum'] = flag_of_ok_device_sum
-				print(_key_ring)  # test del
+				print(_key_ring, '\n prepare for starting!')  # test del
 				self.send_a_message(_key_ring, next_one_ip)
 			elif system_is_running:
 				# running branch
-				next_one_ip = self._get_next_one_ip(ip_of_devices)
-				print(_key_ring)  # test del
+				next_one_ip, del_one_ip = self._get_next_one_ip(ip_of_devices)
+				if del_one_ip and del_one_ip[0] == _key_ring['server'][0]:
+					# restart all system
+					sendcommand_instance.stop_system()
+					time.sleep(3)
+					print('restart training system!!!', _key_ring)
+					sendcommand_instance.start_system(_key_ring)
+				else:
+					print(_key_ring, '\n is running')  # just for test
 				self.send_a_message(_key_ring, next_one_ip)
 
 	def _get_next_one_ip(self, ip_of_devices, if_calculate=False):
@@ -127,14 +137,16 @@ class AutoCheck:
 				next_one_ip = ip_of_devices[i][0]
 				break
 
+		del_one_ip = None
 		while not (self.judge_if_a_ip_can_reach(next_one_ip)):
-			if ip_of_devices[i] == :
+			del_one_ip = ip_of_devices[i]
+			print('remove ', ip_of_devices[i])
 			del ip_of_devices[i]  # here add switch server function
-			if i == len(ip_of_devices) - 1:  # if i is the last of in the list.
+			if i == len(ip_of_devices):  # if i is the last of in the list.
 				i = 0
 			next_one_ip = ip_of_devices[i][0]
 
-		return next_one_ip
+		return next_one_ip, del_one_ip
 
 	def run(self):
 		t1 = Thread(target=self.listener, args=())
