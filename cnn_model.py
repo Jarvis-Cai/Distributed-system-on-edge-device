@@ -1,25 +1,29 @@
 import tensorflow as tf
 
-
+#============================================================================================#
+# performance test cnn model
 def cnn_test(inputs, class_num=10):
 
     # x = tf.reshape(inputs, [-1, 32, 32, 3])
     x = inputs
+    # layers 1
     net = tf.layers.conv2d(x, 32, [5, 5], activation=tf.nn.relu, padding='SAME', name='conv1')
     net = tf.layers.max_pooling2d(net, [2, 2], strides=2, padding='VALID', name='pool1')
-
+    # layers 2
     net = tf.layers.conv2d(net, 64, [5, 5], activation=tf.nn.relu, padding='SAME', name='conv2')
     net = tf.layers.max_pooling2d(net, [2, 2], strides=2, padding='VALID', name='pool2')
-
+    # data shape transform same as reshape([None,1])
     net = tf.layers.flatten(net, name='flatten3')
-
+    # full connect layers 1
     net = tf.layers.dense(net, 1024, activation=tf.nn.relu, name='fc3')
+    # downsampling (prevent overfit)
     net = tf.layers.dropout(net, training=True, name='dropout3')
+    # full connect layers 2 & output
     outputs = tf.layers.dense(net, class_num, name='fco')
     return outputs
 
-########################################
-
+#=============================================================================================#
+# mobileNet V3 
 
 def _make_divisible(v, divisor=8, min_value=None):
     if min_value is None:
@@ -32,6 +36,7 @@ def _make_divisible(v, divisor=8, min_value=None):
 
 
 def _batch_normalization_layer(inputs, is_training=True, name='bn'):
+    # bn operation
     tmp = tf.layers.batch_normalization(inputs=inputs,
                                         training=is_training,
                                         name=name)
@@ -39,6 +44,7 @@ def _batch_normalization_layer(inputs, is_training=True, name='bn'):
 
 
 def _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=False, strides=1, padding="SAME"):
+    # conv operation
     x = tf.layers.conv2d(
         inputs=inputs, filters=filters_num,
         kernel_size=kernel_size, strides=strides, kernel_initializer=tf.contrib.layers.variance_scaling_initializer(),
@@ -49,6 +55,7 @@ def _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=False, stride
 
 
 def _conv_1x1_bn(inputs, filters_num, name, use_bias=True, is_training=True):
+    # 1x1 conv
     kernel_size = 1
     strides = 1
     x = _conv2d_layer(inputs, filters_num, kernel_size, name=name + "/conv_1p1", use_bias=use_bias, strides=strides)
@@ -57,6 +64,7 @@ def _conv_1x1_bn(inputs, filters_num, name, use_bias=True, is_training=True):
 
 
 def _conv_bn_relu(inputs, filters_num, kernel_size, name, use_bias=True, strides=1, is_training=True, activation=tf.nn.relu6):
+    # bn and relu
     x = _conv2d_layer(inputs, filters_num, kernel_size, name, use_bias=use_bias, strides=strides)
     x = _batch_normalization_layer(x, is_training=is_training, name=name + '/cbr_bn')
     x = activation(x)
@@ -66,6 +74,7 @@ def _conv_bn_relu(inputs, filters_num, kernel_size, name, use_bias=True, strides
 def _dwise_conv(inputs, k_h=3, k_w=3, depth_multiplier=1, strides=(1, 1),
                 padding='SAME', name='dwise_conv', use_bias=False,
                 ):
+    # dw conv
     kernel_size = (k_w, k_h)
     in_channel = inputs.get_shape().as_list()[-1]
     filters = int(in_channel*depth_multiplier)
@@ -93,6 +102,7 @@ def hard_sigmoid(x, name='hard_sigmoid'):
 
 
 def _fully_connected_layer(inputs, units, name="fc", activation=None, use_bias=True, is_training=True):
+    # fully connect
     tmp = tf.layers.dense(inputs, units, activation=activation, use_bias=use_bias,
                           name=name, kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=5e-4))
     # tmp = tf.layers.dropout(tmp, rate=0.2, training=is_training)
@@ -100,11 +110,13 @@ def _fully_connected_layer(inputs, units, name="fc", activation=None, use_bias=T
 
 
 def _global_avg(inputs, pool_size, strides, padding='same', name='global_avg'):
+    # average pool
     return tf.layers.average_pooling2d(inputs, pool_size, strides,
                                        padding=padding, data_format='channels_last', name=name)
 
 
 def _squeeze_excitation_layer(inputs, out_dim, ratio, layer_name, is_training=True):
+
     with tf.variable_scope(layer_name):
         squeeze = _global_avg(inputs, pool_size=inputs.get_shape()[1:-1], strides=1)
 
@@ -132,6 +144,7 @@ def mobilenet_v3_block(inputs, k_s, expansion_ratio, output_dim, stride, name, i
         # pw mobilenetV2
         net = _conv_1x1_bn(inputs, bottleneck_dim, name="pw", use_bias=use_bias)
 
+        # select activate function
         if activatation == "HS":
             net = hard_swish(net)
         elif activatation == "RE":
@@ -139,7 +152,7 @@ def mobilenet_v3_block(inputs, k_s, expansion_ratio, output_dim, stride, name, i
         else:
             raise NotImplementedError
 
-        # dw
+        # dw conv
         net = _dwise_conv(net, k_w=k_s, k_h=k_s, strides=[stride, stride], name='dw',
                           use_bias=use_bias)
 
@@ -180,6 +193,8 @@ def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, re
     #     [96, 96, 5, 1, "HS", True, 576],
     #     [96, 96, 5, 1, "HS", True, 576],
     # ]
+
+    # in_channels, out_channels, kernel_size, stride, activatation, se, exp_size
     layers = [
         [16, 16, 3, 1, "RE", True, 16],
         [16, 24, 3, 2, "RE", False, 72],
@@ -237,7 +252,7 @@ def mobilenet_v3_small(inputs, classes_num, multiplier=1.0, is_training=True, re
         logits = tf.identity(logits, name='output')
         end_points["Logits_out"] = logits
 
-    return logits, end_points
+    return logits, end_points                   # return？
 
 
 def mobilenet_v3_large(inputs, classes_num, multiplier=1.0, is_training=True, reuse=None):
