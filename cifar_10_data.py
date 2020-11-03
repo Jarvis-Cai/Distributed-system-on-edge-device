@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+# Data reading and preprocessing module
 
 import pickle
 import random
@@ -16,21 +17,21 @@ img_channels = 3
 #  └─ shuffe and return data
 # ========================================================== #
 
-
+# Get the information in each batch file
 def unpickle(file):
     with open(file, 'rb') as fo:
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-
+# read file data
 def load_data_one(file):
     batch = unpickle(file)
-    data = batch[b'data']
-    labels = batch[b'labels']
+    data = batch[b'data']                           # read picture information
+    labels = batch[b'labels']                       # read labels information
     print("Loading %s : %d." % (file, len(data)))
     return data, labels
 
-
+# no using this function
 def load_data(files, data_dir, label_count):
     global image_size, img_channels
     data, labels = load_data_one(data_dir + '/' + files[0])
@@ -43,16 +44,16 @@ def load_data(files, data_dir, label_count):
     data = data.transpose([0, 2, 3, 1])
     return data, labels
 
-
+# read file list
 def load_data_mine(files, data_dir, label_count):
     global image_size, img_channels
-    data, labels = load_data_one(data_dir + '/' + files[0])
+    data, labels = load_data_one(data_dir + '/' + files[0])         # data_batch_1 
     for f in files[1:]:
-        data_n, labels_n = load_data_one(data_dir + '/' + f)
+        data_n, labels_n = load_data_one(data_dir + '/' + f)        # data_batch_n 
         data = np.concatenate((data, data_n))
         labels = np.concatenate((labels, labels_n))
 
-    num_data = len(labels)
+    num_data = len(labels)                                          # total data number
     labels = np.array([[float(i == label) for i in range(label_count)] for label in labels])
     data = data.reshape((num_data, image_size * image_size, img_channels), order='F')
     data = data.reshape((num_data, image_size, image_size, img_channels))
@@ -61,22 +62,23 @@ def load_data_mine(files, data_dir, label_count):
 
 def prepare_data():
     print("======Loading data======")
-    data_dir = './cifar-10-batches-py'
-    image_dim = image_size * image_size * img_channels
+    data_dir = './cifar-10-batches-py'                      # Root Path
+    image_dim = image_size * image_size * img_channels      # picture size 32*32*3 = 3072
     meta = unpickle(data_dir + '/batches.meta')
 
-    label_names = meta[b'label_names']
-    label_count = len(label_names)
+    label_names = meta[b'label_names']                      # label_names[0]=="airplane",label_names[1]=="automobile",etc...
+    label_count = len(label_names)                          # 10 types
     train_files = ['data_batch_%d' % d for d in range(1, 6)]
-    train_data, train_labels = load_data_mine(train_files, data_dir, label_count)
-    test_data, test_labels = load_data_mine(['test_batch'], data_dir, label_count)
+    train_data, train_labels = load_data_mine(train_files, data_dir, label_count)   # read train data
+    test_data, test_labels = load_data_mine(['test_batch'], data_dir, label_count)  # read test data
 
     print("Train data:", np.shape(train_data), np.shape(train_labels))
     print("Test data :", np.shape(test_data), np.shape(test_labels))
     print("======Load finished======")
 
+    # Randomly get data
     print("======Shuffling data======")
-    indices = np.random.permutation(len(train_data))
+    indices = np.random.permutation(len(train_data))        
     train_data = train_data[indices]
     train_labels = train_labels[indices]
     indices = np.random.permutation(len(test_data))
@@ -95,7 +97,7 @@ def prepare_data():
 # ├─ data_augmentation()
 # └─ color_preprocessing()
 # ========================================================== #
-
+# is no using?
 def _random_crop(batch, crop_shape, padding=None):
     oshape = np.shape(batch[0])
 
